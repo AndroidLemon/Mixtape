@@ -1,5 +1,7 @@
 # Pipeline POC Implementation Plan
 
+> **STATUS: COMPLETE.** All steps below were executed and verified end-to-end against live Anthropic + Suno credentials (see PR #2 and `MIXTAPE_CONTEXT.md` → "Pipeline script"). Checkboxes are marked done to reflect that — don't re-run this plan; if you're picking up follow-on work (Express wrapper, frontend, intake wiring), start a new plan instead.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Get `pipeline.js` running end-to-end against real Anthropic + Suno API keys, proving the brief → lyrics → music → audio-URL pipeline works, per the "Immediate task for Claude Code" in `MIXTAPE_CONTEXT.md`.
@@ -29,16 +31,16 @@
 - Modify: `package.json`
 - Modify: `package-lock.json`
 
-- [ ] **Step 1: Install the SDK**
+- [x] **Step 1: Install the SDK**
 
 Run: `npm install @anthropic-ai/sdk`
 
-- [ ] **Step 2: Verify it landed in package.json**
+- [x] **Step 2: Verify it landed in package.json**
 
 Run: `grep '"@anthropic-ai/sdk"' package.json`
 Expected: a line like `"@anthropic-ai/sdk": "^0.x.x"` under `"dependencies"`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add package.json package-lock.json
@@ -66,7 +68,7 @@ Splitting that into `{ title, lyrics }` objects is the one piece of pure logic i
 - Create: `lib/parseLyrics.js`
 - Test: `lib/parseLyrics.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `lib/parseLyrics.test.js`:
 
@@ -113,12 +115,12 @@ test('strips the "TRACK n:" prefix and trims surrounding whitespace', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `node --test lib/parseLyrics.test.js`
 Expected: FAIL — `Cannot find module './parseLyrics'`
 
-- [ ] **Step 3: Write the minimal implementation**
+- [x] **Step 3: Write the minimal implementation**
 
 Create `lib/parseLyrics.js`:
 
@@ -141,12 +143,12 @@ function parseLyricsResponse(raw) {
 module.exports = { parseLyricsResponse };
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `node --test lib/parseLyrics.test.js`
 Expected: PASS — both tests green
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lib/parseLyrics.js lib/parseLyrics.test.js
@@ -162,7 +164,7 @@ This wires the three stages together: generate lyrics with Claude, fire off Suno
 **Files:**
 - Create: `pipeline.js`
 
-- [ ] **Step 1: Write the file**
+- [x] **Step 1: Write the file**
 
 Create `pipeline.js`:
 
@@ -343,12 +345,12 @@ async function run() {
 run().catch(console.error);
 ```
 
-- [ ] **Step 2: Syntax-check the file (no API calls yet)**
+- [x] **Step 2: Syntax-check the file (no API calls yet)**
 
 Run: `node --check pipeline.js`
 Expected: no output (exit code 0) — confirms the file parses as valid CommonJS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add pipeline.js
@@ -364,13 +366,13 @@ This is the actual proof of the POC — there's no way to unit-test "does Claude
 **Files:**
 - Modify: `pipeline.js` (only the specific lines that turn out to be wrong)
 
-- [ ] **Step 1: Run it**
+- [x] **Step 1: Run it**
 
 Run: `SUNO_API_KEY=<your-suno-key> ANTHROPIC_API_KEY=<your-anthropic-key> node pipeline.js`
 
 Expect this to take several minutes (lyrics generation, then Suno generation + 15s-interval polling for 5 tracks).
 
-- [ ] **Step 2: If the Anthropic call throws "Anthropic is not a constructor" or similar**
+- [x] **Step 2: If the Anthropic call throws "Anthropic is not a constructor" or similar**
 
 The SDK's CJS export shape varies by version. In `pipeline.js`, change:
 
@@ -386,11 +388,11 @@ const { Anthropic } = require('@anthropic-ai/sdk');
 
 (or `require('@anthropic-ai/sdk').default` if that's what `console.log(require('@anthropic-ai/sdk'))` shows). Re-run.
 
-- [ ] **Step 3: If the Anthropic call throws a "model not found" / 404 error**
+- [x] **Step 3: If the Anthropic call throws a "model not found" / 404 error**
 
 The hardcoded `model: 'claude-sonnet-4-20250514'` snapshot may no longer be available on the account's API access. Replace it with `model: 'claude-sonnet-4-6'` (the current Sonnet alias) in the `generateLyrics` function in `pipeline.js`. Re-run.
 
-- [ ] **Step 4: If lyrics parsing produces 0 tracks or garbled titles/lyrics**
+- [x] **Step 4: If lyrics parsing produces 0 tracks or garbled titles/lyrics**
 
 Add a temporary debug line right after `const raw = response.content[0].text;` in `generateLyrics`:
 
@@ -404,7 +406,7 @@ Re-run, inspect how Claude actually formatted its output (e.g. it may have wrapp
 
 Remove the debug `console.log` once parsing is correct.
 
-- [ ] **Step 5: If `generateMusic` throws reading `data.data.taskId`**
+- [x] **Step 5: If `generateMusic` throws reading `data.data.taskId`**
 
 Add a debug line in the `.then(data => {...})` callback inside `generateMusic`:
 
@@ -417,7 +419,7 @@ Add a debug line in the `.then(data => {...})` callback inside `generateMusic`:
 
 Re-run, find the actual key path for the task identifier in the logged JSON (it may be `data.taskId`, `data.data.task_id`, etc.), and update the `const taskId = ...` line in `pipeline.js` to match. Remove the debug log once correct.
 
-- [ ] **Step 6: If `pollUntilDone` throws reading `data.data.status` or `data.data.response.data`**
+- [x] **Step 6: If `pollUntilDone` throws reading `data.data.status` or `data.data.response.data`**
 
 Add a debug line right after `const data = await res.json();` inside the polling loop:
 
@@ -429,7 +431,7 @@ const status = data.data.status;
 
 Re-run, find the actual paths for `status` and the variations array (with `audio_url` / `duration` fields) in the logged JSON, and update the `const status = ...` and `const variations = ...` lines in `pipeline.js` to match. Remove the debug log once correct.
 
-- [ ] **Step 7: Confirm the POC is proved**
+- [x] **Step 7: Confirm the POC is proved**
 
 Run the full pipeline again from a clean terminal:
 
@@ -437,7 +439,7 @@ Run: `SUNO_API_KEY=<your-suno-key> ANTHROPIC_API_KEY=<your-anthropic-key> node p
 
 Expected final output: a `=== Results ===` section listing all 5 track titles, each with 2 variations showing `audio_url` and `Duration: <n>s`. No errors, no `undefined` values.
 
-- [ ] **Step 8: Commit whatever fixes were needed**
+- [x] **Step 8: Commit whatever fixes were needed**
 
 ```bash
 git add pipeline.js lib/parseLyrics.js lib/parseLyrics.test.js
