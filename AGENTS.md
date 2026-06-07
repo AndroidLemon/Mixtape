@@ -8,7 +8,8 @@ Mixtape turns a conversational intake session into a personalized AI-generated m
 
 ## Where the real spec lives
 
-- **`MIXTAPE_CONTEXT.md`** — the canonical product spec. Contains the brief JSON schema, the three "shapes" (moment/journey/portrait), the full intake chat system prompt, a draft pipeline script, and Suno API reference notes (auth, endpoints, response shapes, status values). Read this before touching the intake chat, the brief schema, or the Suno integration.
+- **`MIXTAPE_CONTEXT.md`** — the canonical product spec. Contains the brief JSON schema, the three "shapes" (moment/journey/portrait), and the full intake chat system prompt. Read this before touching the intake chat or the brief schema.
+- **`[Berklee Hackathon 2026] External API Quick Start.md`** — the *correct* Suno API reference (base URL, auth, request/response shapes, status values, rate limits). `MIXTAPE_CONTEXT.md` originally documented a different, incompatible service (`api.sunoapi.org`); its Suno section has since been corrected to match this doc and to match `pipeline.js`'s verified-working integration. If you're touching the Suno integration, this file is the source of truth — don't trust generic Suno docs found elsewhere.
 - **`docs/superpowers/plans/`** — implementation plans for in-progress work. Check here for the active plan and its checkbox progress before starting something that might already be planned or underway.
 
 ## Conventions to follow
@@ -23,7 +24,7 @@ Mixtape turns a conversational intake session into a personalized AI-generated m
 - `npm start` — runs the Express scaffold (currently just serves "Hello from Mixtape!" at `/`)
 - `npm test` — runs all `*.test.js` files
 - `node --check <file>` — syntax-check a file without running it
-- Pipeline (once built per the plan): `SUNO_API_KEY=<key> ANTHROPIC_API_KEY=<key> node pipeline.js`
+- Pipeline (built and verified end-to-end against live keys): `SUNO_API_KEY=<key> ANTHROPIC_API_KEY=<key> node pipeline.js`
 
 ## What's deliberately deferred (don't build yet)
 

@@ -217,168 +217,68 @@ If they confirm, output the final brief as a JSON code block matching the schema
 
 ---
 
-## Pipeline script (written, not yet run)
+## Pipeline script (implemented and verified end-to-end)
 
-```js
-// pipeline.js
-// Hardcoded test brief → lyrics → Suno → poll → print URLs
-// Run: SUNO_API_KEY=x ANTHROPIC_API_KEY=x node pipeline.js
+The draft that used to live in this section has been superseded by the real
+thing: see `pipeline.js` at the repo root. It's been run against live
+Anthropic + Suno credentials — all 5 Rachel-brief tracks generate lyrics,
+submit to Suno, poll to completion, and print `audio_url`s with no errors.
 
-import Anthropic from "@anthropic-ai/sdk";
-
-const SUNO_KEY = process.env.SUNO_API_KEY;
-const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
-const SUNO_BASE = "https://api.sunoapi.org/api/v1";
-const MODEL = "V4_5PLUS";
-const POLL_INTERVAL_MS = 15000;
-
-const TEST_BRIEF = { /* paste Rachel brief here */ };
-
-async function generateLyrics(brief) {
-  console.log("\n[1/3] Generating lyrics...");
-  const anthropic = new Anthropic({ apiKey: ANTHROPIC_KEY });
-
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 2000,
-    system: `You are a songwriter writing lyrics for a deeply personal music gift.
-Use the lyric_seeds as raw material, not lines to quote directly.
-Write in verses and a chorus. Keep each track to 2-3 minutes of content.
-Never use the recipient's name more than once per track.
-Avoid forced rhymes — a near-rhyme or no rhyme beats a clunky one.
-Output each track exactly as:
-TRACK [n]: [title]
-[lyrics]
----`,
-    messages: [{ role: "user", content: JSON.stringify(brief) }]
-  });
-
-  const raw = response.content[0].text;
-  const tracks = [];
-  const blocks = raw.split("---").filter(b => b.trim());
-
-  for (const block of blocks) {
-    const lines = block.trim().split("\n");
-    const titleLine = lines[0];
-    const lyrics = lines.slice(1).join("\n").trim();
-    const title = titleLine.replace(/^TRACK \d+:\s*/i, "").trim();
-    tracks.push({ title, lyrics });
-  }
-
-  console.log(`   Generated lyrics for ${tracks.length} tracks`);
-  return tracks;
-}
-
-async function generateMusic(brief, lyricTracks) {
-  console.log("\n[2/3] Sending to Suno...");
-
-  const requests = brief.tracks.map((track, i) => {
-    const lyrics = lyricTracks[i]?.lyrics ?? "";
-    return fetch(`${SUNO_BASE}/generate`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${SUNO_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        customMode: true,
-        instrumental: false,
-        model: MODEL,
-        title: track.title,
-        style: track.suno_style_tags,
-        prompt: lyrics
-      })
-    })
-      .then(r => r.json())
-      .then(data => {
-        const taskId = data.data.taskId;
-        console.log(`   Track "${track.title}" → taskId: ${taskId}`);
-        return { title: track.title, taskId };
-      });
-  });
-
-  return Promise.all(requests);
-}
-
-async function pollUntilDone(tasks) {
-  console.log("\n[3/3] Polling for completion...");
-  const remaining = new Map(tasks.map(t => [t.taskId, t.title]));
-  const results = [];
-
-  while (remaining.size > 0) {
-    await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
-
-    for (const [taskId, title] of remaining) {
-      const res = await fetch(
-        `${SUNO_BASE}/generate/record-info?taskId=${taskId}`,
-        { headers: { "Authorization": `Bearer ${SUNO_KEY}` } }
-      );
-      const data = await res.json();
-      const status = data.data.status;
-
-      if (status === "SUCCESS") {
-        const variations = data.data.response.data;
-        console.log(`   ✓ "${title}" complete — ${variations.length} variations`);
-        results.push({ title, taskId, variations });
-        remaining.delete(taskId);
-      } else if (status === "GENERATING") {
-        console.log(`   … "${title}" still generating`);
-      } else {
-        console.error(`   ✗ "${title}" failed: ${status}`);
-        remaining.delete(taskId);
-      }
-    }
-  }
-
-  return results;
-}
-
-async function run() {
-  console.log("=== Mixtape POC Pipeline ===");
-  const lyricTracks = await generateLyrics(TEST_BRIEF);
-  const tasks = await generateMusic(TEST_BRIEF, lyricTracks);
-  const results = await pollUntilDone(tasks);
-
-  console.log("\n=== Results ===");
-  for (const track of results) {
-    console.log(`\n${track.title}`);
-    track.variations.forEach((v, i) => {
-      console.log(`  Variation ${i + 1}: ${v.audio_url}`);
-      console.log(`  Duration: ${v.duration}s`);
-    });
-  }
-}
-
-run().catch(console.error);
-```
+Notable differences from the old draft (which was written against the wrong
+Suno API — see "Suno API reference" below for the corrected facts):
+- CommonJS (`require`/`module.exports`), not ESM `import` — this repo's
+  `package.json` declares `"type": "commonjs"`
+- Lyrics-block parsing lives in `lib/parseLyrics.js` (unit tested via
+  `node --test lib/parseLyrics.test.js`), not inlined in `generateLyrics`
+- `generateMusic`/`pollUntilDone` call `POST /v0/audio` and `GET /v0/audio/{id}`
+  with the `{ title, lyrics, style }` / `{ id, status, audio_url, error }`
+  shapes — not `customMode`/`taskId`/`variations`
+- Model id is `claude-sonnet-4-6` (the old `claude-sonnet-4-20250514` is
+  deprecated and 404s)
 
 ---
 
-## Suno API reference (key facts)
+## Suno API reference (key facts — corrected)
 
-- Base URL: `https://api.sunoapi.org/api/v1`
-- Auth: `Authorization: Bearer YOUR_API_KEY`
-- Generate endpoint: `POST /generate`
-- Poll endpoint: `GET /generate/record-info?taskId=ID`
-- Every generate request returns **2 variations** — present both to the user to choose from
-- Status values: `SUCCESS` | `GENERATING` | failure string
-- Audio URLs expire after **15 days**
-- Model to use: `V4_5PLUS` (richer sound, up to 8 min, 5000 char prompt limit, 1000 char style limit)
-- Custom mode requires: `customMode: true`, `style`, `title`, `prompt` (lyrics)
-- Lyrics endpoint: `POST /generate-lyrics` (separate, async, same poll pattern)
-- Timestamped lyrics: `GET /get-timestamped-lyrics` — fetch post-generation for gift page player
+The facts below replace an earlier version of this section that documented
+`api.sunoapi.org` — a *different, incompatible* service. The real API for
+this hackathon is a proxy at `api.suno.com`. Full reference:
+`[Berklee Hackathon 2026] External API Quick Start.md` (repo root).
+
+- Base URL: `https://api.suno.com/v0`
+- Auth: `Authorization: Bearer <secret_key>` (keys look like `sk_live_` + 64 hex chars)
+- Generate, custom mode (our use case — own lyrics + style): `POST /audio`
+  with `{ title, lyrics, style }` → `{ id, status: "submitted", created_at }`
+- Generate, simple mode (model writes lyrics + style from a description):
+  `POST /audio` with `{ title, description }` — **mutually exclusive** with
+  `style`/`lyrics`, the API rejects combining them
+- Optional fields: `voice_id` (3 preset voices, custom cloning not yet open),
+  `instrumental: true` (lyrics/description become optional)
+- Cover: `POST /audio/{id}/covers`; Mashup: `POST /audio/{id}/mashups`
+  (not used by this pipeline)
+- Poll endpoint: `GET /audio/{id}` →
+  `{ id, status, audio_url, error, metadata, created_at }`
+- Status values: `submitted` → `queued` → `streaming` → `complete` (or `error`,
+  see `error` field for the message). `audio_url` populates once status is
+  `streaming` or `complete`
+- **One `audio_url` per generation request** — not multiple variations like
+  the old (wrong) `sunoapi.org` docs claimed
+- Typical wall-clock time to `complete` is "under a minute" per the docs; in
+  practice our live run saw several minutes per track (5 concurrent), with
+  no errors
+- Rate limits: 10 req/s sustained, 20-request burst, per IP
+- Account usage: `GET /v0/account/usage`
 
 ---
 
-## Immediate task for Claude Code
+## Immediate task for Claude Code — DONE
 
-**Get the pipeline script running end to end against real API keys.**
+~~Get the pipeline script running end to end against real API keys.~~
 
-Start here:
-1. Scaffold the project (`npm init`, install `@anthropic-ai/sdk`)
-2. Drop `pipeline.js` in with the Rachel brief hardcoded
-3. Run it — fix whatever breaks (most likely: lyrics parsing, Suno auth, response shape)
-4. Once you have audio URLs printing to console, the POC is proved
+This has been completed and verified. `pipeline.js` runs end-to-end and
+prints `audio_url`s for all 5 Rachel-brief tracks. See
+`docs/superpowers/plans/2026-06-06-pipeline-poc.md` for the implementation
+plan and its "Definition of done" checklist (all items satisfied).
 
 Next after that:
 - Wrap pipeline in a thin Express server with a `/generate` POST endpoint
