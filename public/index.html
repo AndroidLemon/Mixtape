@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mixtape</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="chat">
+    <h1>Mixtape</h1>
+
+    <div id="transcript" class="transcript"></div>
+
+    <form id="composer" class="composer">
+      <input id="message" type="text" placeholder="Type your reply…" autocomplete="off" required>
+      <button type="submit">Send</button>
+    </form>
+
+    <div id="confirm" class="confirm" hidden>
+      <p>I think we're ready to make this mixtape.</p>
+      <button id="create-gift" type="button">Create my gift</button>
+    </div>
+
+    <p id="generating" class="generating" hidden>
+      Putting your mixtape together — this can take a few minutes. We'll take you to it when it's ready…
+    </p>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

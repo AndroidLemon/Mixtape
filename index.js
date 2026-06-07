@@ -1,11 +1,11 @@
 const express = require('express');
+const { createGenerateRouter } = require('./routes/generate');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-app.get('/', (_req, res) => {
-  res.send('Hello from Mixtape!');
-});
+app.use(express.static('public'));
+app.use(createGenerateRouter());
 
 if (require.main === module) {
   app.listen(port, () => {
