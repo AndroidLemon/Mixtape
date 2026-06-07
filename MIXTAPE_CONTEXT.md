@@ -261,6 +261,20 @@ this hackathon is a proxy at `api.suno.com`. Full reference:
 - Status values: `submitted` → `queued` → `streaming` → `complete` (or `error`,
   see `error` field for the message). `audio_url` populates once status is
   `streaming` or `complete`
+- **`audio_url` is not a stable pointer — it changes host and format as the
+  job progresses**, observed live (and not documented in the spec doc, whose
+  example response shows `cdn.suno.ai/.../audio.mp3`):
+  - while `streaming`: `https://audiopipe.suno.ai/?item_id=<id>` (a live
+    progressive-stream endpoint)
+  - once `complete`: `https://cdn1.suno.ai/<id>.m4a` (a stable CDN file,
+    `.m4a` — AAC in an MP4 container — *not* `.mp3` as the doc's example
+    response shows)
+
+  Anything that persists or caches `audio_url` (e.g. the gift page) must wait
+  for `status === "complete"` before storing it — saving the streaming-phase
+  URL would capture a transient endpoint, not the final file. And don't
+  hardcode an `.mp3` assumption anywhere downstream (transcoding, MIME
+  sniffing, `<audio>` `type` attributes) — the real files are `.m4a`.
 - **One `audio_url` per generation request** — not multiple variations like
   the old (wrong) `sunoapi.org` docs claimed
 - Typical wall-clock time to `complete` is "under a minute" per the docs; in
