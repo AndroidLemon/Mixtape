@@ -7,8 +7,7 @@ const { parseLyricsResponse } = require('./lib/parseLyrics');
 
 const SUNO_KEY = process.env.SUNO_API_KEY;
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
-const SUNO_BASE = 'https://api.sunoapi.org/api/v1';
-const MODEL = 'V4_5PLUS';
+const SUNO_BASE = 'https://api.suno.com/v0';
 const POLL_INTERVAL_MS = 15000;
 
 const TEST_BRIEF = {
@@ -64,7 +63,7 @@ async function generateLyrics(brief) {
   const anthropic = new Anthropic({ apiKey: ANTHROPIC_KEY });
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 2000,
     system: `You are a songwriter writing lyrics for a deeply personal music gift.
 Use the lyric_seeds as raw material, not lines to quote directly.
@@ -90,26 +89,22 @@ async function generateMusic(brief, lyricTracks) {
 
   const requests = brief.tracks.map((track, i) => {
     const lyrics = lyricTracks[i]?.lyrics ?? '';
-    return fetch(`${SUNO_BASE}/generate`, {
+    return fetch(`${SUNO_BASE}/audio`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${SUNO_KEY}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        customMode: true,
-        instrumental: false,
-        model: MODEL,
         title: track.title,
-        style: track.suno_style_tags,
-        prompt: lyrics
+        lyrics,
+        style: track.suno_style_tags
       })
     })
       .then(r => r.json())
       .then(data => {
-        const taskId = data.data.taskId;
-        console.log(`   Track "${track.title}" → taskId: ${taskId}`);
-        return { title: track.title, taskId };
+        console.log(`   Track "${track.title}" → id: ${data.id}`);
+        return { title: track.title, id: data.id };
       });
   });
 
@@ -118,30 +113,27 @@ async function generateMusic(brief, lyricTracks) {
 
 async function pollUntilDone(tasks) {
   console.log('\n[3/3] Polling for completion...');
-  const remaining = new Map(tasks.map(t => [t.taskId, t.title]));
+  const remaining = new Map(tasks.map(t => [t.id, t.title]));
   const results = [];
 
   while (remaining.size > 0) {
     await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
 
-    for (const [taskId, title] of remaining) {
-      const res = await fetch(
-        `${SUNO_BASE}/generate/record-info?taskId=${taskId}`,
-        { headers: { Authorization: `Bearer ${SUNO_KEY}` } }
-      );
+    for (const [id, title] of remaining) {
+      const res = await fetch(`${SUNO_BASE}/audio/${id}`, {
+        headers: { Authorization: `Bearer ${SUNO_KEY}` }
+      });
       const data = await res.json();
-      const status = data.data.status;
 
-      if (status === 'SUCCESS') {
-        const variations = data.data.response.data;
-        console.log(`   ✓ "${title}" complete — ${variations.length} variations`);
-        results.push({ title, taskId, variations });
-        remaining.delete(taskId);
-      } else if (status === 'GENERATING') {
-        console.log(`   … "${title}" still generating`);
+      if (data.status === 'complete') {
+        console.log(`   ✓ "${title}" complete`);
+        results.push({ title, id, audio_url: data.audio_url });
+        remaining.delete(id);
+      } else if (data.error) {
+        console.error(`   ✗ "${title}" failed: ${data.error}`);
+        remaining.delete(id);
       } else {
-        console.error(`   ✗ "${title}" failed: ${status}`);
-        remaining.delete(taskId);
+        console.log(`   … "${title}" still ${data.status}`);
       }
     }
   }
@@ -164,10 +156,7 @@ async function run() {
   console.log('\n=== Results ===');
   for (const track of results) {
     console.log(`\n${track.title}`);
-    track.variations.forEach((v, i) => {
-      console.log(`  Variation ${i + 1}: ${v.audio_url}`);
-      console.log(`  Duration: ${v.duration}s`);
-    });
+    console.log(`  ${track.audio_url}`);
   }
 }
 
