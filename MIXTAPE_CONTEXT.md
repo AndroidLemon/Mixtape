@@ -15,7 +15,7 @@ The pipeline has three stages:
 
 - System prompt: complete and roleplay-tested
 - Brief JSON schema: defined and validated
-- Pipeline script: written but not yet run against real API keys
+- Pipeline script: implemented and verified end-to-end against real API keys (see "Pipeline script" section below)
 - Frontend: deferred — POC only, dazzle later
 - Physical cassette artifact: out of scope for now
 
