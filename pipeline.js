@@ -70,9 +70,13 @@ Use the lyric_seeds as raw material, not lines to quote directly.
 Write in verses and a chorus. Keep each track to 2-3 minutes of content.
 Never use the recipient's name more than once per track.
 Avoid forced rhymes — a near-rhyme or no rhyme beats a clunky one.
-Output each track exactly as:
-TRACK [n]: [title]
-[lyrics]
+Output each track exactly as, with the literal word TRACK followed by the
+track's number (no brackets around the number) and a colon:
+TRACK 1: Song Title Here
+(lyrics here)
+---
+TRACK 2: Next Song Title
+(lyrics here)
 ---`,
     messages: [{ role: 'user', content: JSON.stringify(brief) }]
   });
@@ -101,8 +105,15 @@ async function generateMusic(brief, lyricTracks) {
         style: track.suno_style_tags
       })
     })
-      .then(r => r.json())
-      .then(data => {
+      .then(async r => {
+        const body = await r.text();
+        if (!r.ok) {
+          throw new Error(`Suno generate request for "${track.title}" failed: ${r.status} ${r.statusText} — ${body}`);
+        }
+        const data = JSON.parse(body);
+        if (!data.id) {
+          throw new Error(`Suno generate request for "${track.title}" returned no id — ${body}`);
+        }
         console.log(`   Track "${track.title}" → id: ${data.id}`);
         return { title: track.title, id: data.id };
       });
@@ -123,7 +134,11 @@ async function pollUntilDone(tasks) {
       const res = await fetch(`${SUNO_BASE}/audio/${id}`, {
         headers: { Authorization: `Bearer ${SUNO_KEY}` }
       });
-      const data = await res.json();
+      const body = await res.text();
+      if (!res.ok) {
+        throw new Error(`Suno poll request for "${title}" (${id}) failed: ${res.status} ${res.statusText} — ${body}`);
+      }
+      const data = JSON.parse(body);
 
       if (data.status === 'complete') {
         console.log(`   ✓ "${title}" complete`);

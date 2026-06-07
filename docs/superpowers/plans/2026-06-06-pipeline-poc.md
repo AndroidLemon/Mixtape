@@ -15,12 +15,11 @@
 - `package.json` currently has `"type": "commonjs"` and `index.js` uses `require(...)`. The `pipeline.js` draft in `MIXTAPE_CONTEXT.md` uses ESM `import` syntax — **do not copy it verbatim**. This plan rewrites it to CommonJS `require(...)` so it matches the rest of the project and avoids module-system conflicts.
 - The Rachel test brief (the JSON to hardcode into `TEST_BRIEF`) is fully spelled out in `MIXTAPE_CONTEXT.md` lines 69–116 and reproduced in Task 3 below.
 - Run command: `SUNO_API_KEY=<key> ANTHROPIC_API_KEY=<key> node pipeline.js`
-- Suno reference facts (from `MIXTAPE_CONTEXT.md`):
-  - Base URL `https://api.sunoapi.org/api/v1`, auth header `Authorization: Bearer <key>`
-  - `POST /generate` kicks off a generation job and returns a `taskId`
-  - `GET /generate/record-info?taskId=<id>` polls status; values are `SUCCESS`, `GENERATING`, or a failure string
-  - On `SUCCESS`, the response contains an array of **2 variations**, each with `audio_url` and `duration`
-  - Audio URLs expire after 15 days — that's fine for a POC run
+- Suno reference facts (corrected — see `[Berklee Hackathon 2026] External API Quick Start.md`, the actual hackathon proxy spec; `MIXTAPE_CONTEXT.md` originally pointed at the wrong, incompatible `api.sunoapi.org` service, which this plan's implementation does **not** use):
+  - Base URL `https://api.suno.com/v0`, auth header `Authorization: Bearer <key>`
+  - `POST /audio` with `{ title, lyrics, style }` kicks off a generation job and returns `{ id, status }`
+  - `GET /audio/{id}` polls status; values include `submitted`, `streaming`, `complete`, or an error
+  - On `complete`, the response contains a single `audio_url` per track (not multiple variations)
 
 ---
 
