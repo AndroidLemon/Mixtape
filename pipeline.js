@@ -2,13 +2,10 @@
 // Hardcoded test brief → lyrics → Suno → poll → print URLs
 // Run: SUNO_API_KEY=x ANTHROPIC_API_KEY=x node pipeline.js
 
-const Anthropic = require('@anthropic-ai/sdk');
-const { parseLyricsResponse } = require('./lib/parseLyrics');
+const { runPipeline } = require('./lib/pipeline');
 
 const SUNO_KEY = process.env.SUNO_API_KEY;
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
-const SUNO_BASE = 'https://api.suno.com/v0';
-const POLL_INTERVAL_MS = 15000;
 
 const TEST_BRIEF = {
   recipient_name: 'Rachel',
@@ -58,89 +55,6 @@ const TEST_BRIEF = {
   ]
 };
 
-async function generateLyrics(brief) {
-  console.log('\n[1/3] Generating lyrics...');
-  const anthropic = new Anthropic({ apiKey: ANTHROPIC_KEY });
-
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 2000,
-    system: `You are a songwriter writing lyrics for a deeply personal music gift.
-Use the lyric_seeds as raw material, not lines to quote directly.
-Write in verses and a chorus. Keep each track to 2-3 minutes of content.
-Never use the recipient's name more than once per track.
-Avoid forced rhymes — a near-rhyme or no rhyme beats a clunky one.
-Output each track exactly as:
-TRACK [n]: [title]
-[lyrics]
----`,
-    messages: [{ role: 'user', content: JSON.stringify(brief) }]
-  });
-
-  const raw = response.content[0].text;
-  const tracks = parseLyricsResponse(raw);
-
-  console.log(`   Generated lyrics for ${tracks.length} tracks`);
-  return tracks;
-}
-
-async function generateMusic(brief, lyricTracks) {
-  console.log('\n[2/3] Sending to Suno...');
-
-  const requests = brief.tracks.map((track, i) => {
-    const lyrics = lyricTracks[i]?.lyrics ?? '';
-    return fetch(`${SUNO_BASE}/audio`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${SUNO_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        title: track.title,
-        lyrics,
-        style: track.suno_style_tags
-      })
-    })
-      .then(r => r.json())
-      .then(data => {
-        console.log(`   Track "${track.title}" → id: ${data.id}`);
-        return { title: track.title, id: data.id };
-      });
-  });
-
-  return Promise.all(requests);
-}
-
-async function pollUntilDone(tasks) {
-  console.log('\n[3/3] Polling for completion...');
-  const remaining = new Map(tasks.map(t => [t.id, t.title]));
-  const results = [];
-
-  while (remaining.size > 0) {
-    await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
-
-    for (const [id, title] of remaining) {
-      const res = await fetch(`${SUNO_BASE}/audio/${id}`, {
-        headers: { Authorization: `Bearer ${SUNO_KEY}` }
-      });
-      const data = await res.json();
-
-      if (data.status === 'complete') {
-        console.log(`   ✓ "${title}" complete`);
-        results.push({ title, id, audio_url: data.audio_url });
-        remaining.delete(id);
-      } else if (data.error) {
-        console.error(`   ✗ "${title}" failed: ${data.error}`);
-        remaining.delete(id);
-      } else {
-        console.log(`   … "${title}" still ${data.status}`);
-      }
-    }
-  }
-
-  return results;
-}
-
 async function run() {
   console.log('=== Mixtape POC Pipeline ===');
 
@@ -149,9 +63,22 @@ async function run() {
     process.exit(1);
   }
 
-  const lyricTracks = await generateLyrics(TEST_BRIEF);
-  const tasks = await generateMusic(TEST_BRIEF, lyricTracks);
-  const results = await pollUntilDone(tasks);
+  const seenStatus = new Map();
+  const results = await runPipeline(TEST_BRIEF, {
+    anthropicApiKey: ANTHROPIC_KEY,
+    sunoApiKey: SUNO_KEY,
+    onUpdate: (task) => {
+      if (seenStatus.get(task.title) === task.status) return;
+      seenStatus.set(task.title, task.status);
+      if (task.status === 'complete') {
+        console.log(`   ✓ "${task.title}" complete`);
+      } else if (task.status === 'error') {
+        console.error(`   ✗ "${task.title}" failed: ${task.error}`);
+      } else {
+        console.log(`   … "${task.title}" ${task.status}`);
+      }
+    }
+  });
 
   console.log('\n=== Results ===');
   for (const track of results) {
